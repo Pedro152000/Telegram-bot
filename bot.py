@@ -1,50 +1,52 @@
 import time
 import requests
+import telebot
 
-TOKEN = "8279285665:AAEyYlOpniGDYM0KZyDk_D1L7FypANb3uqs"
+TOKEN = "8279285665:AAGRi2DQg3Mu3gJmZrKdub_0oHybZKQOSA0"
 CHAT_ID = "959511946"
-URL = f"https://api.telegram.org/bot{TOKEN}/"
+bot = telebot.TeleBot(TOKEN)
 
-def send_message(text):
-    try:
-        requests.post(URL + "sendMessage", data={"chat_id": CHAT_ID, "text": text})
-    except Exception as e:
-        print("Erro ao enviar mensagem:", e)
+SOFASCORE_URL = "https://www.sofascore.com/api/v1/event/live"
 
-def get_updates(offset=None):
+def get_live_matches():
     try:
-        params = {"timeout": 100, "offset": offset}
-        response = requests.get(URL + "getUpdates", params=params).json()
-        return response
+        r = requests.get(SOFASCORE_URL)
+        data = r.json()
+        return data.get("events", [])
     except:
-        return {"result": []}
+        return []
 
-def handle_message(text):
-    text = text.lower()
+def check_signals():
+    matches = get_live_matches()
 
-    if text == "/start":
-        send_message("🔥 Bot ativo! Envie: gol, escanteio, canto, alerta")
-    elif text == "gol":
-        send_message("⚽ *ALERTA DE GOL* enviado!")
-    elif text == "escanteio":
-        send_message("🏁 *ALERTA DE ESCANTEIO* enviado!")
-    elif text == "canto":
-        send_message("⬆️ *ALERTA DE CANTOS* enviado!")
-    else:
-        send_message("🤖 Não entendi. Tente /start")
+    if not matches:
+        print("Sem jogos ao vivo...")
+        return
 
-def main():
-    print("Bot iniciado...")
-    last_update_id = None
+    for game in matches:
+        home = game["homeTeam"]["name"]
+        away = game["awayTeam"]["name"]
+        minute = game["time"]["currentPeriodStartTimestamp"]
 
-    while True:
-        updates = get_updates(last_update_id)
+        score_home = game["homeScore"]["current"]
+        score_away = game["awayScore"]["current"]
 
-        for update in updates["result"]:
-            last_update_id = update["update_id"] + 1
-            message = update["message"]["text"]
-            handle_message(message)
+        match_name = f"{home} x {away}"
 
-        time.sleep(1)
+        # 📌 Exemplo de regra para Gol
+        if score_home + score_away == 0:
+            msg = f"⚽ *Possível Gol*\n📌 {match_name}\n⏱ Minuto: {minute}\n📊 Probabilidade: 78%"
+            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+            print("Enviado sinal de gol")
 
-main()
+        # 📌 Escanteios (exemplo simples)
+        if game.get("corner", 0) >= 8:
+            msg = f"🏳️ *Escanteios*\n📌 {match_name}\n⏱ Minuto: {minute}\n📊 Probabilidade: 85%"
+            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+            print("Enviado sinal de escanteio")
+
+print("BOT INICIADO...")
+
+while True:
+    check_signals()
+    time.sleep(30)
